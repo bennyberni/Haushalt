@@ -142,7 +142,26 @@ function norm(d){
 function ensureIn(p){if(!p.groups.some(g=>g.kind==='in'))p.groups.push({id:uid(),name:'Einnahmen',kind:'in',items:[]})}
 let state=load();
 function load(){try{const t=localStorage.getItem(KEY);if(t)return norm(JSON.parse(t))}catch(e){}return empty()}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){toast('Speichern nicht möglich (Speicher gesperrt oder voll)')}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){toast('Speichern nicht möglich (Speicher gesperrt oder voll)')}bk.changed=Date.now();bkSave();ncSchedule()}
+/* ---------- Backup-Erinnerung ---------- */
+const BKEY='haushalt-backup-v1';
+const bk=(()=>{try{const o=JSON.parse(localStorage.getItem(BKEY)||'{}');return o&&typeof o==='object'?o:{}}catch(e){return {}}})();
+if(bk.remind==null)bk.remind=true;
+function bkSave(){try{localStorage.setItem(BKEY,JSON.stringify(bk))}catch(e){}}
+const hasData=()=>state.started&&(state.exp.length||state.goals.length||state.plans.some(p=>p.groups.some(g=>g.items.length)));
+const lastBkTxt=()=>{if(!bk.last)return 'noch nie';const d=new Date(bk.last),days=Math.round((new Date(todayISO()+'T12:00:00')-new Date(d.toLocaleDateString('en-CA')+'T12:00:00'))/864e5);return days<=0?'heute':days===1?'gestern':`vor ${days} Tagen (${d.toLocaleDateString('de-DE')})`};
+function backupDue(){
+ if(!bk.remind||!hasData()||ncActive())return false;
+ const today=todayISO();
+ if(bk.asked===today)return false;
+ if(bk.last&&new Date(bk.last).toLocaleDateString('en-CA')===today)return false;
+ return !bk.last||(bk.changed||0)>bk.last;
+}
+function checkBackup(){
+ if(sheetEl||document.visibilityState==='hidden'||!backupDue())return;
+ bk.asked=todayISO();bkSave();
+ openSheet(`<h3>Zeit für ein Backup</h3><p>Seit deinem letzten Backup hast du Daten geändert. Letztes Backup: <b>${esc(lastBkTxt())}</b>.</p><p style="font-size:.88rem">Ohne Backup gehen deine Daten verloren, wenn du die App löschst oder die Browserdaten entfernst.</p><div class="btns"><button class="btn" data-act="close">Später</button><button class="btn primary" data-act="bkNow">Backup speichern</button></div>`);
+}
 const ui={tab:'month',ym:todayISO().slice(0,7),pm:'all',goal:null,gc:'bal'};
 
 /* ---------- Berechnungen ---------- */
@@ -378,8 +397,8 @@ function goalSheet(id){
 /* ---------- Tab: Mehr ---------- */
 function viewMore(){
  let h=`<div class="sec">Kategorien (Monatsbudget)</div><div class="list">${state.cats.map(c=>`<button class="row" data-act="catEdit" data-id="${c.id}"><span class="dot" style="background:${c.color}"></span><span class="rt"><b>${esc(c.name)}</b></span><span class="ra">${c.budget>0?eur(c.budget):'kein Budget'}</span></button>`).join('')||'<div class="empty">Noch keine Kategorien</div>'}</div><button class="add" data-act="catNew">+ Kategorie</button>`;
- h+=`<div class="sec">Daten</div><div class="list"><button class="row" data-act="export"><span class="rt"><b>Backup speichern</b><small>Alle Daten als Datei (.json) herunterladen</small></span></button><button class="row" data-act="import"><span class="rt"><b>Daten importieren</b><small>Datei auswählen (.json)</small></span></button><button class="row" data-act="paste"><span class="rt"><b>Daten einfügen</b><small>Dateiinhalt als Text einfügen</small></span></button><button class="row" data-act="wipe"><span class="rt"><b class="bad">Alle Daten löschen</b><small>Entfernt alles von diesem Gerät</small></span></button></div>`;
- h+=`<p class="note">Alles wird nur lokal in dieser App auf deinem Gerät gespeichert – keine Anmeldung, keine Cloud. Wenn du die App deinstallierst oder Browserdaten löscht, sind die Daten weg. Speichere deshalb ab und zu ein Backup.</p><p class="note" style="text-align:center">Version 4</p>`;
+ h+=`<div class="sec">Daten</div><div class="list"><button class="row" data-act="export"><span class="rt"><b>Backup speichern</b><small>Als Datei (.json) herunterladen · letztes: ${esc(lastBkTxt())}</small></span></button><button class="row" data-act="bkToggle"><span class="rt"><b>Tägliche Backup-Erinnerung</b><small>Einmal täglich, wenn sich etwas geändert hat</small></span><span class="ra ${bk.remind?'good':''}">${bk.remind?'An':'Aus'}</span></button><button class="row" data-act="ncSetup"><span class="rt"><b>Automatisch in Nextcloud sichern</b><small>${esc(ncStatus())}</small></span><span class="ra ${nc.on&&ncReady()&&!nc.err?'good':nc.err&&nc.on?'bad':''}">${nc.on&&ncReady()?'An':'Aus'}</span></button>${ncReady()?`<button class="row" data-act="ncNow"><span class="rt"><b>Jetzt in Nextcloud speichern</b></span></button><button class="row" data-act="ncLoad"><span class="rt"><b>Aus Nextcloud wiederherstellen</b><small>Ersetzt die Daten auf diesem Gerät</small></span></button>`:''}<button class="row" data-act="import"><span class="rt"><b>Daten importieren</b><small>Datei auswählen (.json)</small></span></button><button class="row" data-act="paste"><span class="rt"><b>Daten einfügen</b><small>Dateiinhalt als Text einfügen</small></span></button><button class="row" data-act="wipe"><span class="rt"><b class="bad">Alle Daten löschen</b><small>Entfernt alles von diesem Gerät</small></span></button></div>`;
+ h+=`<p class="note">${nc.on&&ncReady()?'Deine Daten liegen auf diesem Gerät und werden zusätzlich automatisch in deine eigene Nextcloud gesichert.':'Alles wird nur lokal in dieser App auf deinem Gerät gespeichert – keine Anmeldung, keine Cloud.'} Wenn du die App deinstallierst oder Browserdaten löscht, sind die Daten weg. Speichere deshalb ab und zu ein Backup.</p><p class="note" style="text-align:center">Version 6</p>`;
  return h;
 }
 function catEditSheet(id){
@@ -406,10 +425,67 @@ function render(){
  window.scrollTo(0,y);
 }
 
+/* ---------- Nextcloud-Sync (WebDAV) ---------- */
+const NKEY='haushalt-nc-v1';
+const nc=(()=>{try{const o=JSON.parse(localStorage.getItem(NKEY)||'{}');return o&&typeof o==='object'?o:{}}catch(e){return {}}})();
+if(!nc.dir)nc.dir='Haushalt';
+function ncSave(){try{localStorage.setItem(NKEY,JSON.stringify(nc))}catch(e){}}
+const ncReady=()=>!!(nc.url&&nc.user&&nc.pass);
+const ncActive=()=>!!(nc.on&&ncReady()&&!nc.err&&nc.ok&&Date.now()-nc.ok<3*864e5);
+function ncNormUrl(u){u=String(u||'').trim().replace(/\/+$/,'');if(u&&!/^https?:\/\//i.test(u))u='https://'+u;return u.replace(/\/(index\.php)?(\/(apps|login).*)?$/i,'')}
+function b64(str){const b=new TextEncoder().encode(str);let s='';b.forEach(x=>s+=String.fromCharCode(x));return btoa(s)}
+const ncBase=()=>`${nc.url}/remote.php/dav/files/${encodeURIComponent(nc.user)}/${nc.dir.split('/').filter(Boolean).map(encodeURIComponent).join('/')}`;
+function ncReq(method,path,body,keepalive){
+ const h={Authorization:'Basic '+b64(nc.user+':'+nc.pass)};if(body!=null)h['Content-Type']='application/json';
+ return fetch(ncBase()+path,{method,headers:h,body,cache:'no-store',credentials:'omit',keepalive:!!keepalive&&body&&body.length<60000});
+}
+function ncErrTxt(e,status){
+ if(status===401)return 'Benutzername oder App-Passwort ist falsch';
+ if(status===404)return 'Adresse stimmt nicht (404) – prüfe die Nextcloud-Adresse und den Benutzernamen';
+ if(status===507)return 'Kein Speicherplatz mehr in der Nextcloud';
+ if(status)return 'Server meldet Fehler '+status;
+ return navigator.onLine===false?'Kein Internet':'Server nicht erreichbar oder er blockiert den Zugriff (CORS)';
+}
+let ncTimer=null,ncBusy=false,ncPending=false;
+function ncSchedule(){if(!nc.on||!ncReady())return;ncPending=true;clearTimeout(ncTimer);ncTimer=setTimeout(()=>ncSync(),4000)}
+async function ncSync(opt={}){
+ if(!ncReady()||(!nc.on&&!opt.force))return false;
+ if(!hasData()){if(opt.force)toast('Noch keine Daten zum Hochladen');return false}
+ if(ncBusy){ncPending=true;return false}
+ ncBusy=true;ncPending=false;clearTimeout(ncTimer);
+ const body=JSON.stringify(state,null,1),today=todayISO();let status=0;
+ try{
+  if(!nc.dirOk){const r=await ncReq('MKCOL','');if(!(r.ok||r.status===405)){status=r.status;throw 0}nc.dirOk=true}
+  let r=await ncReq('PUT','/haushalt-daten.json',body,opt.keepalive);if(!r.ok){status=r.status;throw 0}
+  if(nc.day!==today||opt.force){r=await ncReq('PUT',`/haushalt-backup-${today}.json`,body,opt.keepalive);if(!r.ok){status=r.status;throw 0}nc.day=today}
+  nc.ok=Date.now();nc.err='';bk.last=Date.now();bkSave();ncSave();
+  if(opt.force)toast('In Nextcloud gespeichert');
+  return true;
+ }catch(e){
+  if(status===404||status===409)nc.dirOk=false;
+  nc.err=ncErrTxt(e,status);ncSave();if(opt.force)toast(nc.err);return false;
+ }finally{ncBusy=false;if(ui.tab==='more'&&!sheetEl)render();if(ncPending&&!opt.keepalive)ncSchedule()}
+}
+async function ncRestore(){
+ if(!ncReady()){toast('Zuerst Nextcloud einrichten');return}
+ let r;try{r=await ncReq('GET','/haushalt-daten.json')}catch(e){toast(ncErrTxt(e,0));return}
+ if(!r.ok){toast(r.status===404?'In der Nextcloud liegt noch keine Datei':ncErrTxt(null,r.status));return}
+ const t=await r.text();importText(t,{name:'Nextcloud: haushalt-daten.json',size:t.length});
+}
+const ncStatus=()=>!ncReady()?'nicht eingerichtet':!nc.on?'ausgeschaltet':nc.err?'Fehler: '+nc.err:nc.ok?'zuletzt gespeichert '+new Date(nc.ok).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+' Uhr':'wartet auf erste Änderung';
+function ncSheet(){
+ openSheet(`<h3>Nextcloud-Backup</h3><p style="font-size:.88rem">Die App speichert deine Daten nach jeder Änderung automatisch in deiner Nextcloud, dazu einmal am Tag eine Kopie mit Datum.</p>
+ <label class="fld"><span>Nextcloud-Adresse</span><input id="n-url" value="${esc(nc.url||'')}" placeholder="https://cloud.example.de" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+ <label class="fld"><span>Benutzername</span><input id="n-user" value="${esc(nc.user||'')}" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+ <label class="fld"><span>App-Passwort (Nextcloud → Einstellungen → Sicherheit)</span><input id="n-pass" type="password" value="${esc(nc.pass||'')}" autocomplete="off"></label>
+ <label class="fld"><span>Ordner in der Nextcloud</span><input id="n-dir" value="${esc(nc.dir)}" autocomplete="off" autocapitalize="off"></label>
+ <div class="btns">${ncReady()?'<button class="btn danger" data-act="ncOff">Trennen</button>':''}<button class="btn primary" data-act="ncSaveCfg">Speichern &amp; testen</button></div>`,{focus:nc.url?null:'#n-url'});
+}
 /* ---------- Import / Export ---------- */
 function exportData(){
  const blob=new Blob([JSON.stringify(state,null,1)],{type:'application/json'});
  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`haushalt-backup-${todayISO()}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1500);
+ bk.last=Date.now();bkSave();if(ui.tab==='more'&&!sheetEl)render();
  toast('Backup wurde heruntergeladen');
 }
 function importFail(f,txt){
@@ -515,7 +591,24 @@ const A={
   state.started=true;save();closeSheet();render()},
  catDel:t=>{const n=state.exp.filter(e=>e.cat===t.dataset.id).length;if(n){toast(`Kategorie hat noch ${n} Ausgaben – erst diese löschen`);return}
   const s=snap();state.cats=state.cats.filter(c=>c.id!==t.dataset.id);save();closeSheet();render();toast('Kategorie gelöscht',()=>restore(s))},
- export:()=>exportData(),import:()=>pickFile(),paste:()=>pasteSheet(),pasteGo:()=>{const v=sv('#paste').value;closeSheet();importText(v,{name:'(eingefügter Text)',size:v.length})},
+ export:()=>exportData(),
+ ncSetup:()=>ncSheet(),
+ ncNow:()=>ncSync({force:true}),
+ ncLoad:()=>ncRestore(),
+ ncOff:()=>{closeSheet();Object.assign(nc,{on:false,pass:'',ok:0,err:'',dirOk:false,day:''});ncSave();render();toast('Nextcloud getrennt')},
+ ncSaveCfg:async t=>{
+  const url=ncNormUrl(sv('#n-url').value),user=sv('#n-user').value.trim(),pass=sv('#n-pass').value.trim(),dir=sv('#n-dir').value.trim().replace(/^\/+|\/+$/g,'')||'Haushalt';
+  if(!url||!user||!pass){toast('Bitte Adresse, Benutzername und App-Passwort eingeben');return}
+  if(/^http:\/\//i.test(url)){toast('Bitte eine https-Adresse verwenden');return}
+  if(url!==nc.url||user!==nc.user||dir!==nc.dir){nc.dirOk=false;nc.day=''}
+  Object.assign(nc,{url,user,pass,dir,on:true,err:''});ncSave();
+  t.disabled=true;t.textContent='Teste …';
+  const ok=await ncSync({force:true});
+  t.disabled=false;t.textContent='Speichern & testen';
+  if(ok){closeSheet();render()}
+ },
+ bkNow:()=>{exportData();closeSheet()},
+ bkToggle:()=>{bk.remind=!bk.remind;bkSave();render();toast(bk.remind?'Tägliche Erinnerung ist an':'Erinnerung ist aus')},import:()=>pickFile(),paste:()=>pasteSheet(),pasteGo:()=>{const v=sv('#paste').value;closeSheet();importText(v,{name:'(eingefügter Text)',size:v.length})},
  wipe:()=>confirmSheet('Alle Daten löschen?','Alle Ausgaben, Pläne und Sparkonten werden von diesem Gerät entfernt. Das lässt sich nicht rückgängig machen – speichere vorher ein Backup.','Alles löschen',()=>{state=empty();save();ui.goal=null;render()}),
  startEmpty:()=>{
   state=empty();state.started=true;
@@ -540,6 +633,9 @@ window.addEventListener('popstate',e=>{
  render();
 });
 render();
+setTimeout(checkBackup,700);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){setTimeout(checkBackup,500);if(nc.on&&ncReady()&&nc.day!==todayISO())ncSchedule()}else if(ncPending)ncSync({keepalive:true})});
+if(nc.on&&ncReady()&&nc.err)setTimeout(()=>ncSchedule(),1500);
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))}
 })();
 </script>
