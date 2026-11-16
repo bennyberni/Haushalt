@@ -152,14 +152,10 @@ const hasData=()=>state.started&&(state.exp.length||state.goals.length||state.pl
 const lastBkTxt=()=>{if(!bk.last)return 'noch nie';const d=new Date(bk.last),days=Math.round((new Date(todayISO()+'T12:00:00')-new Date(d.toLocaleDateString('en-CA')+'T12:00:00'))/864e5);return days<=0?'heute':days===1?'gestern':`vor ${days} Tagen (${d.toLocaleDateString('de-DE')})`};
 function backupDue(){
  if(!bk.remind||!hasData()||ncActive())return false;
- const today=todayISO();
- if(bk.asked===today)return false;
- if(bk.last&&new Date(bk.last).toLocaleDateString('en-CA')===today)return false;
  return !bk.last||(bk.changed||0)>bk.last;
 }
 function checkBackup(){
  if(sheetEl||document.visibilityState==='hidden'||!backupDue())return;
- bk.asked=todayISO();bkSave();
  openSheet(`<h3>Zeit für ein Backup</h3><p>Seit deinem letzten Backup hast du Daten geändert. Letztes Backup: <b>${esc(lastBkTxt())}</b>.</p><p style="font-size:.88rem">Ohne Backup gehen deine Daten verloren, wenn du die App löschst oder die Browserdaten entfernst.</p><div class="btns"><button class="btn" data-act="close">Später</button><button class="btn primary" data-act="bkNow">Backup speichern</button></div>`);
 }
 const ui={tab:'month',ym:todayISO().slice(0,7),pm:'all',goal:null,gc:'bal'};
@@ -397,8 +393,8 @@ function goalSheet(id){
 /* ---------- Tab: Mehr ---------- */
 function viewMore(){
  let h=`<div class="sec">Kategorien (Monatsbudget)</div><div class="list">${state.cats.map(c=>`<button class="row" data-act="catEdit" data-id="${c.id}"><span class="dot" style="background:${c.color}"></span><span class="rt"><b>${esc(c.name)}</b></span><span class="ra">${c.budget>0?eur(c.budget):'kein Budget'}</span></button>`).join('')||'<div class="empty">Noch keine Kategorien</div>'}</div><button class="add" data-act="catNew">+ Kategorie</button>`;
- h+=`<div class="sec">Daten</div><div class="list"><button class="row" data-act="export"><span class="rt"><b>Backup speichern</b><small>Als Datei (.json) herunterladen · letztes: ${esc(lastBkTxt())}</small></span></button><button class="row" data-act="bkToggle"><span class="rt"><b>Tägliche Backup-Erinnerung</b><small>Einmal täglich, wenn sich etwas geändert hat</small></span><span class="ra ${bk.remind?'good':''}">${bk.remind?'An':'Aus'}</span></button><button class="row" data-act="ncSetup"><span class="rt"><b>Automatisch in Nextcloud sichern</b><small>${esc(ncStatus())}</small></span><span class="ra ${nc.on&&ncReady()&&!nc.err?'good':nc.err&&nc.on?'bad':''}">${nc.on&&ncReady()?'An':'Aus'}</span></button>${ncReady()?`<button class="row" data-act="ncNow"><span class="rt"><b>Jetzt in Nextcloud speichern</b></span></button><button class="row" data-act="ncLoad"><span class="rt"><b>Aus Nextcloud wiederherstellen</b><small>Ersetzt die Daten auf diesem Gerät</small></span></button>`:''}<button class="row" data-act="import"><span class="rt"><b>Daten importieren</b><small>Datei auswählen (.json)</small></span></button><button class="row" data-act="paste"><span class="rt"><b>Daten einfügen</b><small>Dateiinhalt als Text einfügen</small></span></button><button class="row" data-act="wipe"><span class="rt"><b class="bad">Alle Daten löschen</b><small>Entfernt alles von diesem Gerät</small></span></button></div>`;
- h+=`<p class="note">${nc.on&&ncReady()?'Deine Daten liegen auf diesem Gerät und werden zusätzlich automatisch in deine eigene Nextcloud gesichert.':'Alles wird nur lokal in dieser App auf deinem Gerät gespeichert – keine Anmeldung, keine Cloud.'} Wenn du die App deinstallierst oder Browserdaten löscht, sind die Daten weg. Speichere deshalb ab und zu ein Backup.</p><p class="note" style="text-align:center">Version 6</p>`;
+ h+=`<div class="sec">Daten</div><div class="list"><button class="row" data-act="export"><span class="rt"><b>Backup speichern</b><small>Als Datei (.json) herunterladen · letztes: ${esc(lastBkTxt())}</small></span></button><button class="row" data-act="bkToggle"><span class="rt"><b>Backup-Erinnerung</b><small>Bei jedem Öffnen, solange nicht gesichert</small></span><span class="ra ${bk.remind?'good':''}">${bk.remind?'An':'Aus'}</span></button><button class="row" data-act="ncSetup"><span class="rt"><b>Automatisch in Nextcloud sichern</b><small>${esc(ncStatus())}</small></span><span class="ra ${nc.on&&ncReady()&&!nc.err?'good':nc.err&&nc.on?'bad':''}">${nc.on&&ncReady()?'An':'Aus'}</span></button>${ncReady()?`<button class="row" data-act="ncNow"><span class="rt"><b>Jetzt in Nextcloud speichern</b></span></button><button class="row" data-act="ncLoad"><span class="rt"><b>Aus Nextcloud wiederherstellen</b><small>Ersetzt die Daten auf diesem Gerät</small></span></button>`:''}<button class="row" data-act="import"><span class="rt"><b>Daten importieren</b><small>Datei auswählen (.json)</small></span></button><button class="row" data-act="paste"><span class="rt"><b>Daten einfügen</b><small>Dateiinhalt als Text einfügen</small></span></button><button class="row" data-act="wipe"><span class="rt"><b class="bad">Alle Daten löschen</b><small>Entfernt alles von diesem Gerät</small></span></button></div>`;
+ h+=`<p class="note">${nc.on&&ncReady()?'Deine Daten liegen auf diesem Gerät und werden zusätzlich automatisch in deine eigene Nextcloud gesichert.':'Alles wird nur lokal in dieser App auf deinem Gerät gespeichert – keine Anmeldung, keine Cloud.'} Wenn du die App deinstallierst oder Browserdaten löscht, sind die Daten weg. Speichere deshalb ab und zu ein Backup.</p><p class="note" style="text-align:center">Version 7</p>`;
  return h;
 }
 function catEditSheet(id){
@@ -608,7 +604,7 @@ const A={
   if(ok){closeSheet();render()}
  },
  bkNow:()=>{exportData();closeSheet()},
- bkToggle:()=>{bk.remind=!bk.remind;bkSave();render();toast(bk.remind?'Tägliche Erinnerung ist an':'Erinnerung ist aus')},import:()=>pickFile(),paste:()=>pasteSheet(),pasteGo:()=>{const v=sv('#paste').value;closeSheet();importText(v,{name:'(eingefügter Text)',size:v.length})},
+ bkToggle:()=>{bk.remind=!bk.remind;bkSave();render();toast(bk.remind?'Erinnerung ist an':'Erinnerung ist aus')},import:()=>pickFile(),paste:()=>pasteSheet(),pasteGo:()=>{const v=sv('#paste').value;closeSheet();importText(v,{name:'(eingefügter Text)',size:v.length})},
  wipe:()=>confirmSheet('Alle Daten löschen?','Alle Ausgaben, Pläne und Sparkonten werden von diesem Gerät entfernt. Das lässt sich nicht rückgängig machen – speichere vorher ein Backup.','Alles löschen',()=>{state=empty();save();ui.goal=null;render()}),
  startEmpty:()=>{
   state=empty();state.started=true;
@@ -634,7 +630,8 @@ window.addEventListener('popstate',e=>{
 });
 render();
 setTimeout(checkBackup,700);
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){setTimeout(checkBackup,500);if(nc.on&&ncReady()&&nc.day!==todayISO())ncSchedule()}else if(ncPending)ncSync({keepalive:true})});
+let hiddenAt=0;
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){if(Date.now()-hiddenAt>60000)setTimeout(checkBackup,500);if(nc.on&&ncReady()&&nc.day!==todayISO())ncSchedule()}else{hiddenAt=Date.now();if(ncPending)ncSync({keepalive:true})}});
 if(nc.on&&ncReady()&&nc.err)setTimeout(()=>ncSchedule(),1500);
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))}
 })();
