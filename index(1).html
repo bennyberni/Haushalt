@@ -173,7 +173,7 @@ function checkBackup(){
  if(sheetEl||document.visibilityState==='hidden'||!backupDue())return;
  openSheet(`<h3>Zeit für ein Backup</h3><p>Möchtest du jetzt deine Daten sichern? Letztes Backup: <b>${esc(lastBkTxt())}</b>${bk.last&&(bk.changed||0)<=bk.last?', seitdem keine Änderungen':''}.</p><p style="font-size:.88rem">Ohne Backup gehen deine Daten verloren, wenn du die App löschst oder die Browserdaten entfernst.</p><div class="btns"><button class="btn" data-act="close">Später</button><button class="btn primary" data-act="bkNow">Backup speichern</button></div>`);
 }
-const ui={tab:'month',ym:todayISO().slice(0,7),pm:'all',goal:null,gc:'bal',vc:'',vq:'',vn:60};
+const ui={tab:'month',ym:todayISO().slice(0,7),pm:'all',goal:null,gc:'bal',vc:'',vq:'',vn:60,vm:'save',sg:'',sk:'',sq:''};
 
 /* ---------- Berechnungen ---------- */
 const budgetOf=(c,ym)=>{const o=state.budgets[ym];return o&&o[c.id]!=null?o[c.id]:c.budget};
@@ -439,8 +439,35 @@ function vList(){
  if(all.length>shown.length)h+=`<button class="add" data-act="vMore">Weitere anzeigen (${all.length-shown.length})</button>`;
  return h;
 }
+/* Verlauf: Sparbuchungen */
+function sAll(){const out=[];state.goals.forEach(g=>g.tx.forEach(t=>out.push({g,t})));return out}
+function sList(){
+ const q=ui.sq.trim().toLowerCase();
+ const all=sAll().filter(({g,t})=>(!ui.sg||g.id===ui.sg)&&(!ui.sk||(ui.sk==='in'?t.amt>=0:t.amt<0))&&(!q||(t.note+' '+g.name+' '+(t.amt>=0?'einzahlung':'entnahme abgehoben')+' '+fmtIn(Math.abs(t.amt))+' '+fmtD(t.date)).toLowerCase().includes(q))).sort((a,b)=>b.t.date.localeCompare(a.t.date));
+ if(!all.length)return `<div class="card empty">${q||ui.sk||ui.sg?'Nichts gefunden.':'Noch keine Buchungen.<br>Ein- und Auszahlungen machst du im Reiter „Sparen“.'}</div>`;
+ const shown=all.slice(0,ui.vn),by={};
+ shown.forEach(x=>{const m=x.t.date.slice(0,7);(by[m]=by[m]||[]).push(x)});
+ let h=`<div class="vmh"><span>${all.length} ${all.length===1?'Buchung':'Buchungen'}</span><span></span></div>`;
+ h+=Object.keys(by).sort().reverse().map(ym=>`<div class="vmh"><span>${esc(monthLbl(ym))}</span><span></span></div><div class="list">${by[ym].map(({g,t})=>`<button class="row" data-act="txEdit" data-g="${g.id}" data-id="${t.id}"><span class="dot" style="background:${t.amt>=0?'var(--good)':'#f59e0b'}"></span><span class="rt"><b>${t.amt>=0?'Eingezahlt':'Abgehoben'} · ${esc(g.name)}</b><small>${fmtD(t.date)}${t.note?' · '+esc(t.note):''}</small></span><span class="ra ${t.amt>=0?'good':''}">${t.amt>=0?'+':'−'}${eur(Math.abs(t.amt))}</span></button>`).join('')}</div>`).join('');
+ if(all.length>shown.length)h+=`<button class="add" data-act="vMore">Weitere anzeigen (${all.length-shown.length})</button>`;
+ return h;
+}
+function viewHistSave(){
+ const sel=sAll().filter(({g})=>!ui.sg||g.id===ui.sg);
+ const inn=r2(sel.reduce((a,{t})=>a+(t.amt>0?t.amt:0),0)),out=r2(sel.reduce((a,{t})=>a+(t.amt<0?-t.amt:0),0));
+ let h='';
+ if(state.goals.length>1)h+=`<div class="vchips">${[['','Alle Konten']].concat(state.goals.map(g=>[g.id,g.name])).map(([id,n])=>`<button class="chip ${ui.sg===id?'on':''}" data-act="sGoal" data-id="${id}">${esc(n)}</button>`).join('')}</div>`;
+ h+=`<div class="vsum"><div class="card"><small>Eingezahlt</small><b class="good">+${eur(inn)}</b></div><div class="card"><small>Abgehoben</small><b>−${eur(out)}</b></div></div>`;
+ h+=`<div class="sec">Buchungen</div><div class="vchips">${[['','Alle'],['in','Einzahlungen'],['out','Abhebungen']].map(([k,n])=>`<button class="chip ${ui.sk===k?'on':''}" data-act="sKind" data-k="${k}">${n}</button>`).join('')}</div>`;
+ h+=`<input class="vsearch" id="sq" type="search" placeholder="Suchen: Konto, Notiz, Betrag, Datum" value="${esc(ui.sq)}" autocomplete="off"><div id="vlist">${sList()}</div>`;
+ return h;
+}
 function viewHist(){
  if(!state.started)return welcome();
+ const seg=`<div class="seg"><button data-act="vMode" data-k="save" class="${ui.vm==='save'?'on':''}">Sparen</button><button data-act="vMode" data-k="exp" class="${ui.vm==='exp'?'on':''}">Ausgaben</button></div>`;
+ return seg+(ui.vm==='save'?viewHistSave():viewHistExp());
+}
+function viewHistExp(){
  const ex=vExp(),rows=vMonths().map(ym=>{const sp=r2(ex.filter(e=>e.date.slice(0,7)===ym).reduce((a,e)=>a+e.amt,0));return {ym,sp,b:vBudget(ym)}});
  const now=todayISO().slice(0,7),past=rows.filter(x=>x.ym<=now),used=past.filter(x=>x.sp>0);
  const tot=r2(past.reduce((a,x)=>a+x.sp,0)),avg=used.length?r2(tot/used.length):0;
@@ -455,7 +482,7 @@ function viewHist(){
 function viewMore(){
  let h=`<div class="sec">Kategorien (Monatsbudget)</div><div class="list">${state.cats.map(c=>`<button class="row" data-act="catEdit" data-id="${c.id}"><span class="dot" style="background:${c.color}"></span><span class="rt"><b>${esc(c.name)}</b></span><span class="ra">${c.budget>0?eur(c.budget):'kein Budget'}</span></button>`).join('')||'<div class="empty">Noch keine Kategorien</div>'}</div><button class="add" data-act="catNew">+ Kategorie</button>`;
  h+=`<div class="sec">Daten</div><div class="list"><button class="row" data-act="export"><span class="rt"><b>Backup speichern</b><small>Speicherort wählen (.json) · letztes: ${esc(lastBkTxt())}</small></span></button><button class="row" data-act="bkToggle"><span class="rt"><b>Backup-Erinnerung</b><small>Hinweis nach jedem Speichern</small></span><span class="ra ${bk.remind?'good':''}">${bk.remind?'An':'Aus'}</span></button><button class="row" data-act="ncSetup"><span class="rt"><b>Automatisch in Nextcloud sichern</b><small>${esc(ncStatus())}</small></span><span class="ra ${nc.on&&ncReady()&&!nc.err?'good':nc.err&&nc.on?'bad':''}">${nc.on&&ncReady()?'An':'Aus'}</span></button>${ncReady()?`<button class="row" data-act="ncNow"><span class="rt"><b>Jetzt in Nextcloud speichern</b></span></button><button class="row" data-act="ncLoad"><span class="rt"><b>Aus Nextcloud wiederherstellen</b><small>Ersetzt die Daten auf diesem Gerät</small></span></button>`:''}<button class="row" data-act="import"><span class="rt"><b>Daten importieren</b><small>Datei auswählen (.json)</small></span></button><button class="row" data-act="paste"><span class="rt"><b>Daten einfügen</b><small>Dateiinhalt als Text einfügen</small></span></button><button class="row" data-act="wipe"><span class="rt"><b class="bad">Alle Daten löschen</b><small>Entfernt alles von diesem Gerät</small></span></button></div>`;
- h+=`<p class="note">${nc.on&&ncReady()?'Deine Daten liegen auf diesem Gerät und werden zusätzlich automatisch in deine eigene Nextcloud gesichert.':'Alles wird nur lokal in dieser App auf deinem Gerät gespeichert – keine Anmeldung, keine Cloud.'} Wenn du die App deinstallierst oder Browserdaten löscht, sind die Daten weg. Speichere deshalb ab und zu ein Backup.</p><p class="note" style="text-align:center">Version 11</p>`;
+ h+=`<p class="note">${nc.on&&ncReady()?'Deine Daten liegen auf diesem Gerät und werden zusätzlich automatisch in deine eigene Nextcloud gesichert.':'Alles wird nur lokal in dieser App auf deinem Gerät gespeichert – keine Anmeldung, keine Cloud.'} Wenn du die App deinstallierst oder Browserdaten löscht, sind die Daten weg. Speichere deshalb ab und zu ein Backup.</p><p class="note" style="text-align:center">Version 12</p>`;
  return h;
 }
 function catEditSheet(id){
@@ -594,7 +621,10 @@ const A={
  addToCat:t=>expSheet(null,t.dataset.id),
  editExp:t=>expSheet(t.dataset.id),
  vCat:t=>{ui.vc=t.dataset.id||'';ui.vn=60;render()},
- vMore:t=>{ui.vn+=100;const l=$('#vlist');if(l)l.innerHTML=vList()},
+ vMore:t=>{ui.vn+=100;const l=$('#vlist');if(l)l.innerHTML=ui.vm==='save'?sList():vList()},
+ vMode:t=>{ui.vm=t.dataset.k;ui.vn=60;render()},
+ sGoal:t=>{ui.sg=t.dataset.id||'';ui.vn=60;render()},
+ sKind:t=>{ui.sk=t.dataset.k||'';ui.vn=60;render()},
  vMon:t=>{ui.ym=t.dataset.ym;ui.tab='month';ui.goal=null;pushNav();window.scrollTo(0,0);render()},
  pickcat:t=>{$$all('#f-cats .chip').forEach(b=>b.classList.remove('on'));t.classList.add('on')},
  saveExp:t=>{
@@ -695,7 +725,7 @@ function $$all(s,r=document){return [...r.querySelectorAll(s)]}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const f=A[t.dataset.act];if(f)f(t,e)});
 document.addEventListener('change',e=>{if(e.target.id==='planSel'){state.curPlan=e.target.value;save();render()}});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet()});
-document.addEventListener('input',e=>{if(e.target.id==='vq'){ui.vq=e.target.value;ui.vn=60;const l=$('#vlist');if(l)l.innerHTML=vList()}});
+document.addEventListener('input',e=>{if(e.target.id==='sq'){ui.sq=e.target.value;ui.vn=60;const l=$('#vlist');if(l)l.innerHTML=sList()}if(e.target.id==='vq'){ui.vq=e.target.value;ui.vn=60;const l=$('#vlist');if(l)l.innerHTML=vList()}});
 try{history.replaceState({tab:ui.tab,goal:ui.goal,sheet:false},'')}catch(e){}
 window.addEventListener('popstate',e=>{
  if(skipPop){skipPop=false;const c=pendingCb;pendingCb=null;if(sheetEl)hideSheet();if(c)c();return}
