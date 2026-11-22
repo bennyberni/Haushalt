@@ -1,4 +1,4 @@
-const CACHE = 'haushalt-v7';
+const CACHE = 'haushalt-v9';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
